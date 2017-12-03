@@ -1,10 +1,15 @@
 import aiohttp
 import asyncio
+import requests
 import time
 import random
 from itertools import islice
 import logging
 import configs
+import cchardet as chardet
+
+script_name = 'url_helper'
+log = logging.getLogger(script_name)
 
 def chunk(it, size):
     it = iter(it)
@@ -19,20 +24,25 @@ async def fetch(session, url):
             async with session.get(url) as response:
                 rs = await response.text()
                 time_taken = str(time.monotonic() - t)
-                logging.debug('OK: timeout thushold: {} time taken: {} status: {} url: {}'.format(
+                log.debug('OK: timeout thushold: {} time taken: {} status: {} url: {}'.format(
                     thushold, time_taken,str(response.status), url))
                 # rs=rs[:15] #debug
 
 
     except Exception as e:
         time_taken = str(time.monotonic() - t)
-        logging.debug('Failed: timeout thushold: {} time taken: {} type: {} error: {} url: {}'.format(
+        log.debug('Failed: timeout thushold: {} time taken: {} type: {} error: {} url: {}'.format(
             thushold, time_taken, str(type(e)), str(e),url))
 
 
     return url, rs
 
-def get_urls(urls, stops_btw_batch = True, num_sim_req = 3):
+def get_urls_async(urls,
+                   stops_btw_batch = True,
+                   num_sim_req = 3,
+                   stop_mean = configs.http_stop_mean,
+                   stop_std = configs.http_stop_std,
+                   stop_max = configs.http_stop_max):
 
     """
     :param urls: (list) list of url to get
@@ -44,11 +54,11 @@ def get_urls(urls, stops_btw_batch = True, num_sim_req = 3):
     aggre_results = []
     t = time.monotonic()
     for ix, url_batch in enumerate(url_batches):
-        logging.debug('Chunk: {} Started '.format(ix))
+        log.debug('Chunk: {} Started '.format(ix))
         t_chunk = time.monotonic()
         batch_url_contents = {i: None for i in url_batch}
         for trail in range(configs.http_retry_max):
-            logging.debug('trail {} started'.format(trail))
+            log.debug('trail {} started'.format(trail))
             loop = asyncio.get_event_loop()
             conn = aiohttp.TCPConnector(verify_ssl=False)
             asyncio.set_event_loop(loop)
@@ -64,23 +74,23 @@ def get_urls(urls, stops_btw_batch = True, num_sim_req = 3):
 
 
             if stops_btw_batch is True:
-                sleep_time = max(min(configs.http_stop_max, random.gauss(configs.http_stop_mean, configs.http_stop_std)), 0)
-                logging.debug('Sleep for {} seconds'.format(sleep_time))
+                sleep_time = max(min(stop_max, random.gauss(stop_mean, stop_std)), 0)
+                log.debug('Sleep for {} seconds'.format(sleep_time))
                 time.sleep(sleep_time)
 
             if None in batch_url_contents.values():
-                logging.debug('Error in retrieving article.')
+                log.debug('Error in retrieving article.')
             else:
                 break
 
         for i, j in batch_url_contents.items():
             if j is None:
-                logging.debug('Error in retrieving article for {} after {} retry'.format(i, configs.http_retry_max))
+                log.debug('Error in retrieving article for {} after {} retry'.format(i, configs.http_retry_max))
             else:
                 aggre_results.append((i, j))
 
-        logging.debug('Chunk: {} Done in : {}'.format(ix, str(time.monotonic() - t_chunk)))
-    logging.debug('All Done in {}'.format(str(time.monotonic() - t)))
+        log.debug('Chunk: {} Done in : {}'.format(ix, str(time.monotonic() - t_chunk)))
+    log.debug('All Done in {}'.format(str(time.monotonic() - t)))
     url_contents = {url: contents for url, contents in aggre_results}
     return url_contents
 
@@ -94,8 +104,45 @@ def get_url(url):
     elif isinstance(url, str):
         urls = [url]
     assert isinstance(urls, list)
-    results = get_urls(urls, False)
+    results = get_urls_async(urls, False)
     return results[url]
+
+def get_url_sync(url):
+    """
+    :param url: (str) single url to get
+    :return: html, None if error
+    Notice that this function utilize requests, which is blocking
+    """
+    response = None
+    for trial in range(configs.http_retry_max):
+
+        try:
+            r = requests.get(url, timeout=configs.http_timeout)
+            if r.status_code == 200:
+                response = r.content.decode(chardet.detect(r.content)['encoding'])
+                break
+            else:
+                logging.debug('Error while requesting {}. Status Code: {}'.format(url, r.status_code))
+        except requests.exceptions.Timeout:
+            logging.debug('Timeout while requesting {}'.format(url))
+        except requests.exceptions.RetryError:
+            logging.debug('RetryError while requesting {}'.format(url))
+        except requests.exceptions.InvalidURL:
+            logging.debug('URL error while requesting {}'.format(url))
+            break
+        except Exception as e:
+            logging.debug(r'Error while requesting {}. \n Error msg: {}'.format(url, e))
+        if trial - 1 < configs.http_retry_max:
+            stop_mean = configs.http_stop_mean
+            stop_std = configs.http_stop_std
+            stop_max = configs.http_stop_max
+            sleep_time = max(min(stop_max, random.gauss(stop_mean, stop_std)), 0)
+            logging.debug('Retry in {} seconds'.format(sleep_time))
+            time.sleep(sleep_time)
+        else:
+            logging.debug('Retry Max reached')
+    return {url: response}
+
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(threadName)s - %(message)s')
@@ -125,6 +172,7 @@ if __name__ == '__main__':
         "https://yandex.ru",
         "http://appaaaa.com"
     ]
-    results = get_urls(urls, False, 20)
-    # results = get_url('https://www.apple.com')
-    # logging.debug(results)
+    # results = get_urls(urls, False, 20)
+    for i in urls:
+        results = get_urls_async(i)
+        logging.debug(results)
