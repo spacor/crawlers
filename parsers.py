@@ -8,36 +8,30 @@ log = logging.getLogger(script_name)
 def parser_master(parser_name, article_html, url):
     article_contents = None
     #need to add try to catch parser issue
+    parser_dict = {
+        'xinhua_news': xinhua,
+        'qq_news': qq,
+        'reuters_cn_news': reuters_cn,
+        '163_news': news163,
+        'eastday': eastday,
+        'sohu': sohu,
+        'ifeng': ifeng,
+        'sina': sina,
+        'china': china,
+        'appledaily': appledaily,
+        'orientaldaily': orientaldaily,
+        'peoplesdaily': peoplesdaily,
+        'pladaily': pladaily,
+        'securitiestimes': securitiestimes
+    }
     try:
-        if parser_name == 'xinhua_news':
-            article_contents = xinhua(article_html)
-        elif parser_name == 'qq_news':
-            article_contents = qq(article_html)
-        elif parser_name == 'reuters_cn_news':
-            article_contents = reuters_cn(article_html)
-        elif parser_name == '163_news':
-            article_contents = news163(article_html)
-        elif parser_name == 'eastday':
-            article_contents = eastday(article_html)
-        elif parser_name == 'sohu':
-            article_contents = sohu(article_html)
-        elif parser_name == 'ifeng':
-            article_contents = ifeng(article_html)
-        elif parser_name == 'sina':
-            article_contents = sina(article_html)
+        if parser_name in parser_dict:
+            article_contents = parser_dict[parser_name](article_html)
         else:
             log.error('Article parser {} doesnt exist'.format(parser_name))
     except:
         log.error('Parser {} unable to parse article {}'.format(parser_name, url ))
 
-    # if article_contents is None:
-    #     article_contents = {
-    #         'title': None,
-    #         'section': None,
-    #         'as_of_dt': None,
-    #         'src': None,
-    #         'text': None
-    #     }
     return article_contents
 
 def xinhua(article_html):
@@ -133,6 +127,8 @@ def news163(article_html):
         content_div = soup.find('div', class_='post_content_main')
     if soup.find('div', class_='post_body') is not None: #template 3
         content_div = soup.find('div', class_='post_body')
+    if soup.find('div', class_='article-body') is not None: #template 4
+        content_div = soup.find('div', class_='article-body')
     else:
         log.debug('Failed to find main article')
     article_text_p = []
@@ -153,6 +149,26 @@ def eastday(article_html):
     soup = bs(article_html, 'html.parser')
     if soup.find('div', id='content') is not None: #template 1
         content_div = soup.find('div', id='content')
+    else:
+        log.debug('Failed to find main article')
+    article_text_p = []
+    for i in content_div.find_all('p'):
+        article_text_p.append(i.text)
+    article_contents = {
+        'title': None,
+        'section': None,
+        'as_of_dt': None,
+        'src': src,
+        'text': '\n'.join(article_text_p)
+    }
+    return article_contents
+
+def china(article_html):
+    article_contents = None
+    src = 'china'
+    soup = bs(article_html, 'html.parser')
+    if soup.find('div', class_='navp c') is not None: #template 1
+        content_div = soup.find('div', class_='navp c')
     else:
         log.debug('Failed to find main article')
     article_text_p = []
@@ -227,6 +243,122 @@ def sina(article_html):
         'text': '\n'.join(article_text_p)
     }
     return article_contents
+
+def appledaily(article_html):
+    article=None
+    src = 'appledaily'
+    soup = bs(article_html, 'html.parser')
+    main_content_div = soup.find('div', id='masterContent')
+    article = main_content_div.text.strip()
+    article_contents = {
+        'title': None,
+        'section': None,
+        'as_of_dt': None,
+        'src': src,
+        'text': article
+    }
+    return article_contents
+
+def orientaldaily(article_html):
+    article=None
+    src = 'orientaldaily'
+
+    #get lead txt
+    leader_txt=''
+    try:
+        soup = bs(article_html, 'html.parser')
+        lead_div = soup.find('div', class_='leadin')
+        leader_txt = lead_div.text
+    except:
+        log.debug('No Leading Text')
+
+    #main text
+    main_content_txt = ''
+    try:
+        main_content_div = soup.find('div', id='contentCTN-right')
+        main_content_div.script.decompose()
+        main_content_txt = main_content_div.text
+    except:
+        log.debug('No Main Text')
+    article = leader_txt + main_content_txt
+    article_contents = {
+        'title': None,
+        'section': None,
+        'as_of_dt': None,
+        'src': src,
+        'text': article
+    }
+    return article_contents
+
+def peoplesdaily(article_html):
+    src = 'peoplesdaily'
+    article = None
+    title = None
+    soup = bs(article_html, 'html.parser')
+    content_div = soup.find('div', class_='text_c')
+
+    #get title
+    try:
+        title_1 = content_div.h3.text
+    except:
+        title_1= ''
+    try:
+        title_2 = content_div.h1.text
+    except:
+        title_2=''
+    try:
+        title_3 = content_div.h2.text
+    except:
+        title_3=''
+    title = '\n'.join([title_1, title_2, title_3])
+
+    #get article
+    article_p = [i.text for i in content_div.find_all('p')]
+    article = ''.join(article_p)
+    article_contents = {
+        'title': title,
+        'section': None,
+        'as_of_dt': None,
+        'src': src,
+        'text': article
+    }
+    return article_contents
+
+def pladaily(article_html):
+    src = 'pladaily'
+    article = None
+    soup = bs(article_html, 'html.parser')
+    content_div = soup.find('div', class_='article-content')
+
+    #get article
+    article_p = [i.text for i in content_div.find_all('p')]
+    article = ''.join(article_p)
+    article_contents = {
+        'title': None,
+        'section': None,
+        'as_of_dt': None,
+        'src': src,
+        'text': article
+    }
+    return article_contents
+
+def securitiestimes(article_html):
+    src = 'securitiestimes'
+
+    article = None
+    soup = bs(article_html, 'html.parser')
+    content_div = soup.find('div', class_='tc_con')
+    article = '\n'.join([i.text for i in content_div.find_all('p')])
+    article_contents = {
+        'title': None,
+        'section': None,
+        'as_of_dt': None,
+        'src': src,
+        'text': article
+    }
+    return article_contents
+
+
 
 def test_xh_parser():
     import url_helper

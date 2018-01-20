@@ -39,7 +39,7 @@ async def fetch(session, url):
 
 def get_urls_async(urls,
                    stops_btw_batch = True,
-                   num_sim_req = 3,
+                   num_sim_req = 5,
                    stop_mean = configs.http_stop_mean,
                    stop_std = configs.http_stop_std,
                    stop_max = configs.http_stop_max):
@@ -107,7 +107,7 @@ def get_url(url):
     results = get_urls_async(urls, False)
     return results[url]
 
-def get_url_sync(url):
+def get_url_sync(url, headers = None):
     """
     :param url: (str) single url to get
     :return: html, None if error
@@ -117,7 +117,7 @@ def get_url_sync(url):
     for trial in range(configs.http_retry_max):
 
         try:
-            r = requests.get(url, timeout=configs.http_timeout)
+            r = requests.get(url, timeout=configs.http_timeout, headers = headers)
             if r.status_code == 200:
                 response = r.content.decode(chardet.detect(r.content)['encoding'])
                 break
@@ -174,5 +174,5 @@ if __name__ == '__main__':
     ]
     # results = get_urls(urls, False, 20)
     for i in urls:
-        results = get_urls_async(i)
+        results = get_url_sync(i)
         logging.debug(results)

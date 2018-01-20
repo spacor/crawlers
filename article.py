@@ -20,18 +20,15 @@ class Article:
         self.src = src
         self.parser_ready = True
 
-    # def update_field(self, field_name, value):
-    #     field_map = {'url': self.url,
-    #                  'title': self.title,
-    #                  'text': self.text,
-    #                  'section': self.section,
-    #                  'as_of_dt': self.as_of_dt,
-    #                  'crawl_ts': self.crawl_ts,
-    #                  'src': self.src}
-    #
-    #     if field_name in field_map.keys():
-    #         if value is not None:
-    #             field_map[field_name] = value
+    def __str__(self):
+        return '{url} {title} {text} {section} {as_of_dt} {crawl_ts} {src}'.format(url=self.url,
+                                                                                   title=self.title,
+                                                                                   text = self.text,
+                                                                                   section = self.section,
+                                                                                   as_of_dt=self.as_of_dt,
+                                                                                   crawl_ts=self.crawl_ts,
+                                                                                   src = self.src)
+
 
     def export_db_fmt(self):
         docu = OrderedDict([
@@ -42,6 +39,22 @@ class Article:
             ('as_of_dt', self.as_of_dt),
             ('crawl_ts', dt.datetime.utcnow()),
             ('src', self.src),
-            ('parser_ready', self.parser_ready)
+            ('parser_ready', bool(self.text))
         ])
         return docu
+
+    def left_merge(self, right_article):
+        if self.url is None:
+            self.url = right_article.url
+        if self.title is None:
+            self.title = right_article.title
+        if self.text is None:
+            self.text = right_article.text
+        if self.section is None:
+            self.section = right_article.section
+        if self.as_of_dt is None:
+            self.as_of_dt = right_article.as_of_dt
+        if self.crawl_ts is None:
+            self.crawl_ts = right_article.crawl_ts
+        if self.src is None:
+            self.src = right_article.src

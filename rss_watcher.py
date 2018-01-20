@@ -15,7 +15,6 @@ import parsers
 from article import Article
 
 
-
 def get_rss_config():
     client = pm.MongoClient(configs.db_conn_str)
     db = client.crawls
@@ -208,6 +207,12 @@ if __name__ == '__main__':
         if args.backfill is True:
             backfill()
         else:
-            main()
+            while True:
+                try:
+                    main()
+                except:
+                    log.error('Error in rss_watch. Restarting')
+                    time.sleep(60)
+
     except KeyboardInterrupt:
         log.info('Stopping')
